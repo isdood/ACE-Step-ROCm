@@ -132,23 +132,90 @@ class ACEStepPipeline:
             self.dtype = torch.float32
         if 'ACE_PIPELINE_DTYPE' in os.environ and len(os.environ['ACE_PIPELINE_DTYPE']):
             self.dtype = getattr(torch, os.environ['ACE_PIPELINE_DTYPE'])
-        self.device = device
+
+        # Use new device detection logic
+        self.device = self._get_optimal_device(device_id)
+        # Optimize dtype for the selected device
+        self.dtype = self._get_optimal_dtype(self.dtype, self.device)
         self.loaded = False
         self.torch_compile = torch_compile
         self.cpu_offload = cpu_offload
         self.quantized = quantized
         self.overlapped_decode = overlapped_decode
 
+    def _get_optimal_device(self, device_id):
+        """Get the optimal device considering ROCm, CUDA, and CPU availability."""
+        # Check for ROCm first (AMD GPUs)
+        if hasattr(torch, 'hip') and torch.hip.is_available():
+            device_count = torch.hip.device_count()
+            if device_count > device_id:
+                logger.info(f"Using ROCm device {device_id} (HIP available)")
+                return torch.device(f"hip:{device_id}")
+            else:
+                logger.warning(f"Requested ROCm device {device_id} not available, only {device_count} devices found")
+                if device_count > 0:
+                    logger.info(f"Falling back to ROCm device 0")
+                    return torch.device("hip:0")
+
+        # Check for CUDA (NVIDIA GPUs)
+        if torch.cuda.is_available():
+            device_count = torch.cuda.device_count()
+            if device_count > device_id:
+                logger.info(f"Using CUDA device {device_id}")
+                return torch.device(f"cuda:{device_id}")
+            else:
+                logger.warning(f"Requested CUDA device {device_id} not available, only {device_count} devices found")
+                if device_count > 0:
+                    logger.info(f"Falling back to CUDA device 0")
+                    return torch.device("cuda:0")
+
+        # Check for MPS (Apple Silicon)
+        if device.type == "cpu" and torch.backends.mps.is_available():
+            logger.info("Using MPS device (Apple Silicon)")
+            return torch.device("mps")
+
+        # Fall back to CPU
+        logger.info("Using CPU device")
+        return torch.device("cpu")
+
+    def _get_optimal_dtype(self, dtype, device):
+        """Get optimal dtype based on device and requested dtype."""
+        # ROCm (HIP) benefits from float16 for memory efficiency
+        if device.type == "hip":
+            if dtype == torch.bfloat16:
+                logger.info("Using float16 for ROCm (better memory efficiency)")
+                return torch.float16
+            return torch.float32
+
+        # CUDA typically uses bfloat16
+        if device.type == "cuda":
+            if dtype == torch.float16:
+                return torch.bfloat16
+            return dtype
+
+        # CPU and MPS use float32
+        if device.type in ["cpu", "mps"]:
+            return torch.float32
+
+        return dtype
+
     def cleanup_memory(self):
         """Clean up GPU and CPU memory to prevent VRAM overflow during multiple generations."""
-        # Clear CUDA cache
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-            # Log memory usage if in verbose mode
+        # Clear ROCm cache
+        if hasattr(torch, 'hip') and torch.hip.is_available():
+            torch.cuda.empty_cache()  # ROCm uses same cache clearing mechanism
+            # Log ROCm memory usage
             allocated = torch.cuda.memory_allocated() / (1024 ** 3)
             reserved = torch.cuda.memory_reserved() / (1024 ** 3)
-            logger.info(f"GPU Memory: {allocated:.2f}GB allocated, {reserved:.2f}GB reserved")
+            logger.info(f"ROCm Memory: {allocated:.2f}GB allocated, {reserved:.2f}GB reserved")
+
+        # Clear CUDA cache (for NVIDIA GPUs)
+        elif torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            # Log CUDA memory usage
+            allocated = torch.cuda.memory_allocated() / (1024 ** 3)
+            reserved = torch.cuda.memory_reserved() / (1024 ** 3)
+            logger.info(f"CUDA Memory: {allocated:.2f}GB allocated, {reserved:.2f}GB reserved")
 
         # Collect Python garbage
         import gc

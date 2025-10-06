@@ -39,9 +39,11 @@ class ACEStepOutput(BaseModel):
     message: str
 
 def initialize_pipeline(checkpoint_path: str, bf16: bool, torch_compile: bool, device_id: int) -> ACEStepPipeline:
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(device_id)
+    # Remove hardcoded CUDA_VISIBLE_DEVICES - let the pipeline handle device detection
+    # os.environ["CUDA_VISIBLE_DEVICES"] = str(device_id)
     return ACEStepPipeline(
         checkpoint_dir=checkpoint_path,
+        device_id=device_id,  # Pass device_id to use our new device detection logic
         dtype="bfloat16" if bf16 else "float32",
         torch_compile=torch_compile,
     )

@@ -52,7 +52,8 @@ def main(checkpoint_path, server_name, port, device_id, share, bf16, torch_compi
     Main function to launch the ACE Step pipeline demo.
     """
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(device_id)
+    # Remove hardcoded CUDA_VISIBLE_DEVICES - let the pipeline handle device detection
+    # os.environ["CUDA_VISIBLE_DEVICES"] = str(device_id)
 
     from acestep.ui.components import create_main_demo_ui
     from acestep.pipeline_ace_step import ACEStepPipeline
@@ -60,6 +61,7 @@ def main(checkpoint_path, server_name, port, device_id, share, bf16, torch_compi
 
     model_demo = ACEStepPipeline(
         checkpoint_dir=checkpoint_path,
+        device_id=device_id,  # Pass device_id to use our new device detection logic
         dtype="bfloat16" if bf16 else "float32",
         torch_compile=torch_compile,
         cpu_offload=cpu_offload,

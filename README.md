@@ -29,6 +29,12 @@ ACE-Step bridges this gap by integrating diffusion-based generation with Sana’
 
 Rather than building yet another end-to-end text-to-music pipeline, our vision is to establish a foundation model for music AI: a fast, general-purpose, efficient yet flexible architecture that makes it easy to train sub-tasks on top of it. This paves the way for developing powerful tools that seamlessly integrate into the creative workflows of music artists, producers, and content creators. In short, we aim to build the Stable Diffusion moment for music.
 
+## ROCm Support
+
+This is a fork of the ACE-Step repo focused on adding ROCm support. Optimizations have yet to be explored; currently, I'm averaging roughly ~3it/s on my 7900XTX, though it will vary depending on generation settings.
+
+*** Note: This is a WIP. ROCm support is currently in development - training currently does not properly work on ROCm 6.4. Audio2Audio via the Gradio web-app results in a segfault each time - I haven't looked into this much yet.
+
 
 ## 📢 News and Updates
 
@@ -184,6 +190,22 @@ We use RTF (Real-Time Factor) to measure the performance of ACE-Step. Higher val
 
 
 ## 📦 Installation
+*** Note: This is functional on a 7900XTX using both Ubuntu & Arch. The same dependencies are required, though you'll also need to ensure you have ROCm 6.4 installed through your package manager (names vary by distro). 
+
+## ROCm
+
+### 1. Initialize the environment
+
+```bash
+./scripts/env-init.sh
+```
+
+### 2. Start the web app
+
+```bash
+./scripts/start-acestep.sh --port 7865 --device_id 0
+```
+## Default Installation Steps
 
 ### 1. Clone the Repository
 First, clone the ACE-Step repository to your local machine and navigate into the project directory:
